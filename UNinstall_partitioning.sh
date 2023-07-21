@@ -1,6 +1,10 @@
 #!/bin/bash
 
-dbname=zabbix
+# Set variable here or export values before running this script
+# export PGHOST=""
+# export PGDATABASE=""
+# export PGUSER=""
+# export PGPASSWORD=""
 
 #####################################################################
 # UNinstall_partitioning.sh
@@ -17,7 +21,9 @@ main () {
   date +"%Y-%m-%d %H:%M:%S %Z"
   echo "Logging to: ${logfile}"
   echo "Settings:"
-  echo "   dbname=${dbname}"
+  echo "   PGHOST=${PGHOST}"
+  echo "   PGDATABASE=${PGDATABASE}"
+  echo "   PGUSER=${PGUSER}"
   drop_partition_triggers || exit 1
   drop_trigger_function || exit 1
   echo 'BEGIN;' > copy_and_drop.sql
@@ -32,7 +38,7 @@ main () {
 drop_partition_triggers () {
   echo 'drop_partitions ------------------------------------------------'
   date +"%Y-%m-%d %H:%M:%S %Z"
-  psql -Xe -v ON_ERROR_STOP=on ${dbname} <<EOF
+  psql -Xe -v ON_ERROR_STOP=on ${PGDATABASE} <<EOF
     DROP TRIGGER zbx_partition_trg ON history;
     DROP TRIGGER zbx_partition_trg ON history_uint;
     DROP TRIGGER zbx_partition_trg ON history_str;
@@ -54,7 +60,7 @@ EOF
 drop_trigger_function () {
   echo 'drop_trigger_function ------------------------------------------'
   date +"%Y-%m-%d %H:%M:%S %Z"
-  psql -Xe -v ON_ERROR_STOP=on ${dbname} <<EOF
+  psql -Xe -v ON_ERROR_STOP=on ${PGDATABASE} <<EOF
     DROP FUNCTION zbx_part_trigger_func();
 EOF
   rc=$?
@@ -70,7 +76,7 @@ EOF
 gen_copy_sql () {
   echo '-- gen_copy_sql ---------------------------------------------------'
   date +"-- %Y-%m-%d %H:%M:%S %Z"
-  psql -Xqt -v ON_ERROR_STOP=on ${dbname} <<EOF | egrep -v '^$'
+  psql -Xqt -v ON_ERROR_STOP=on ${PGDATABASE} <<EOF | egrep -v '^$'
     SELECT 'INSERT INTO public.history SELECT * from partitions.' || table_name ||';'
       FROM information_schema.tables
      WHERE table_schema = 'partitions'

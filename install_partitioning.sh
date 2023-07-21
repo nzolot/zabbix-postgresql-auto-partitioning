@@ -1,7 +1,10 @@
 #!/bin/bash
 
-dbname=zabbix
-dbowner=zabbix
+# Set variable here or export values before running this script
+# export PGHOST=""
+# export PGDATABASE=""
+# export PGUSER=""
+# export PGPASSWORD=""
 
 #####################################################################
 # install_partitioning.sh
@@ -29,8 +32,9 @@ main () {
   date +"%Y-%m-%d %H:%M:%S %Z"
   echo "Logging to: ${logfile}"
   echo "Settings:"
-  echo "   dbname=${dbname}"
-  echo "   dbowner=${dbowner}"
+  echo "   PGHOST=${PGHOST}"
+  echo "   PGDATABASE=${PGDATABASE}"
+  echo "   PGUSER=${PGUSER}"
   create_partition_schema || exit 1
   create_trigger_function || exit 1
   create_cleanup_function || exit 1
@@ -41,9 +45,9 @@ main () {
 create_partition_schema () {
   echo 'create_partition_schema ----------------------------------------'
   date +"%Y-%m-%d %H:%M:%S %Z"
-  psql -Xe -v ON_ERROR_STOP=on ${dbname} <<EOF
-    CREATE SCHEMA partitions
-      AUTHORIZATION ${dbowner};
+  psql -Xe -v ON_ERROR_STOP=on ${PGDATABASE} <<EOF
+    CREATE SCHEMA IF NOT EXISTS partitions
+      AUTHORIZATION ${PGUSER};
 EOF
   rc=$?
   if [[ $rc -eq 0 ]]; then
@@ -59,7 +63,7 @@ EOF
 create_trigger_function () {
   echo 'create_trigger_function ----------------------------------------'
   date +"%Y-%m-%d %H:%M:%S %Z"
-  psql -Xe -v ON_ERROR_STOP=on ${dbname} <<"EOF"
+  psql -Xe -v ON_ERROR_STOP=on ${PGDATABASE} <<"EOF"
     CREATE OR REPLACE FUNCTION zbx_part_trigger_func() RETURNS trigger AS
     $BODY$
       DECLARE
@@ -97,9 +101,9 @@ create_trigger_function () {
             startdate := extract(epoch FROM date_trunc(selector, to_timestamp(NEW.clock)));
             enddate := extract(epoch FROM date_trunc(selector, to_timestamp(NEW.clock) + _interval ));
             create_table_part := 'CREATE TABLE IF NOT EXISTS ' || quote_ident(prefix) || '.' || quote_ident(tablename)
-                              || ' (CHECK ((clock >= ' || quote_literal(startdate)
-                              || ' AND clock < ' || quote_literal(enddate)
-                              || '))) INHERITS (' || TG_TABLE_NAME || ')';
+                              || ' (CHECK ((clock >= ' || startdate
+                              || ' AND clock < ' || enddate
+                              || '))) INHERITS (public.' || TG_TABLE_NAME || ')';
             create_index_part := 'CREATE INDEX IF NOT EXISTS ' || quote_ident(tablename)
                               || '_1 on ' || quote_ident(prefix) || '.' || quote_ident(tablename) || '(itemid,clock)';
             EXECUTE create_table_part;
@@ -133,7 +137,7 @@ EOF
 create_cleanup_function () {
   echo 'create_cleanup_function ----------------------------------------'
   date +"%Y-%m-%d %H:%M:%S %Z"
-  psql -Xe -v ON_ERROR_STOP=on ${dbname} <<"EOF"
+  psql -Xe -v ON_ERROR_STOP=on ${PGDATABASE} <<"EOF"
     CREATE OR REPLACE FUNCTION zbx_part_cleanup_func(retention_age interval, partition_interval text) RETURNS text AS
     $BODY$
       DECLARE
@@ -188,15 +192,15 @@ EOF
 add_partition_triggers () {
   echo 'add_partition_triggers -----------------------------------------'
   date +"%Y-%m-%d %H:%M:%S %Z"
-  psql -Xe -v ON_ERROR_STOP=on ${dbname} <<EOF
-    SET ROLE ${dbowner};
-    CREATE TRIGGER zbx_partition_trg BEFORE INSERT ON history           FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('day');
-    CREATE TRIGGER zbx_partition_trg BEFORE INSERT ON history_uint      FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('day');
-    CREATE TRIGGER zbx_partition_trg BEFORE INSERT ON history_str       FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('day');
-    CREATE TRIGGER zbx_partition_trg BEFORE INSERT ON history_text      FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('day');
-    CREATE TRIGGER zbx_partition_trg BEFORE INSERT ON history_log       FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('day');
-    CREATE TRIGGER zbx_partition_trg BEFORE INSERT ON trends            FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('month');
-    CREATE TRIGGER zbx_partition_trg BEFORE INSERT ON trends_uint       FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('month');
+  psql -Xe -v ON_ERROR_STOP=on ${PGDATABASE} <<EOF
+    SET ROLE ${PGUSER};
+    CREATE OR REPLACE TRIGGER zbx_partition_trg BEFORE INSERT ON history           FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('day');
+    CREATE OR REPLACE TRIGGER zbx_partition_trg BEFORE INSERT ON history_uint      FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('day');
+    CREATE OR REPLACE TRIGGER zbx_partition_trg BEFORE INSERT ON history_str       FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('day');
+    CREATE OR REPLACE TRIGGER zbx_partition_trg BEFORE INSERT ON history_text      FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('day');
+    CREATE OR REPLACE TRIGGER zbx_partition_trg BEFORE INSERT ON history_log       FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('day');
+    CREATE OR REPLACE TRIGGER zbx_partition_trg BEFORE INSERT ON trends            FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('month');
+    CREATE OR REPLACE TRIGGER zbx_partition_trg BEFORE INSERT ON trends_uint       FOR EACH ROW EXECUTE PROCEDURE zbx_part_trigger_func('month');
 EOF
   rc=$?
   if [[ $rc -eq 0 ]]; then

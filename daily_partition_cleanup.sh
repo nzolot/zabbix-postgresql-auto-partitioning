@@ -1,6 +1,10 @@
 #!/bin/bash
 
-dbname=zabbix
+# Set variable here or export values before running this script
+# export PGHOST=""
+# export PGDATABASE=""
+# export PGUSER=""
+# export PGPASSWORD=""
 
 daily_retention='31 days'
 monthly_retention='12 months'
@@ -36,7 +40,9 @@ main() {
   echo "Hostname: `hostname`"
   echo "Logfile.: ${logfile}"
   echo "Settings:"
-  echo "   dbname=${dbname}"
+  echo "   PGHOST=${PGHOST}"
+  echo "   PGDATABASE=${PGDATABASE}"
+  echo "   PGUSER=${PGUSER}"
   echo "   daily_retention='${daily_retention}'"
   echo "   monthly_retention='${monthly_retention}'"
   echo "   cleanup_log_retention=${cleanup_log_retention}"
@@ -49,7 +55,7 @@ drop_old_partitions () {
   echo 'drop_old_partitions --------------------------------------------'
   date +"%Y-%m-%d %H:%M:%S %Z"
   echo
-  psql -Xqte -v ON_ERROR_STOP=on ${dbname} <<EOF
+  psql -Xqte -v ON_ERROR_STOP=on ${PGDATABASE} <<EOF
     SELECT zbx_part_cleanup_func('${daily_retention}', 'day');
     SELECT zbx_part_cleanup_func('${monthly_retention}', 'month');
 EOF
@@ -65,7 +71,7 @@ EOF
 
   Script..: ${abspath}/${script}
   Host....: `hostname`
-  Database: ${dbname}
+  Database: ${PGDATABASE}
   Log file: ${logfile}
   Date....: `date +'%Y-%m-%d %H:%M:%S %Z'`
 
